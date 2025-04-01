@@ -359,57 +359,13 @@ class BibleScraperApp:
 
     def extract_keywords(self, text):
         """Extrai palavras-chave importantes, excluindo conectivos comuns"""
-        # Lista de palavras de conexão/artigos/preposições para excluir (em português)
+        # Lista reduzida de palavras para excluir (conectivos mais comuns)
         stopwords = {
-            'o', 'a', 'os', 'as', 'um', 'uma', 'uns', 'umas', 'de', 'do', 'da', 'dos', 'das',
-            'em', 'no', 'na', 'nos', 'nas', 'por', 'pelo', 'pela', 'pelos', 'pelas', 'para',
-            'com', 'como', 'que', 'e', 'ou', 'se', 'mas', 'porque', 'pois', 'quando', 'onde',
-            'como', 'qual', 'quais', 'quem', 'cujo', 'cuja', 'cujos', 'cujas', 'este', 'esta',
-            'estes', 'estas', 'esse', 'essa', 'esses', 'essas', 'aquele', 'aquela', 'aqueles',
-            'aquelas', 'não', 'sim', 'sem', 'sob', 'sobre', 'entre', 'até', 'para', 'por', 'pelo',
-            'pela', 'pelos', 'pelas', 'meu', 'minha', 'meus', 'minhas', 'teu', 'tua', 'teus',
-            'tuas', 'seu', 'sua', 'seus', 'suas', 'nosso', 'nossa', 'nossos', 'nossas', 'vosso',
-            'vossa', 'vossos', 'vossas', 'lhe', 'lhes', 'lho', 'lha', 'lhos', 'lhas', 'lhe', 'lhes',
-            'se', 'si', 'consigo', 'eu', 'tu', 'ele', 'ela', 'nós', 'vós', 'eles', 'elas', 'me',
-            'te', 'o', 'a', 'lhe', 'nos', 'vos', 'os', 'as', 'lhes', 'mim', 'ti', 'ele', 'ela',
-            'nós', 'vós', 'eles', 'elas', 'comigo', 'contigo', 'conosco', 'convosco', 'connosco',
-            'contigo', 'consigo', 'quem', 'que', 'cujo', 'cuja', 'cujos', 'cujas', 'onde', 'aonde',
-            'quando', 'como', 'porque', 'porquê', 'pois', 'então', 'assim', 'logo', 'portanto',
-            'também', 'tampouco', 'além', 'acima', 'abaixo', 'antes', 'depois', 'agora', 'ainda',
-            'já', 'sempre', 'nunca', 'jamais', 'breve', 'cedo', 'tarde', 'hoje', 'ontem', 'amanhã',
-            'logo', 'aqui', 'ali', 'lá', 'acolá', 'cá', 'algures', 'nenhures', 'outrora', 'doravante',
-            'sim', 'não', 'talvez', 'certamente', 'efetivamente', 'realmente', 'verdadeiramente',
-            'absolutamente', 'bastante', 'demais', 'muito', 'pouco', 'quanto', 'tanto', 'quão',
-            'quase', 'só', 'apenas', 'exatamente', 'justamente', 'precisamente', 'unicamente',
-            'tão', 'tanto', 'quanto', 'assim', 'bem', 'mal', 'melhor', 'pior', 'ótimo', 'péssimo',
-            'grande', 'pequeno', 'longe', 'perto', 'alto', 'baixo', 'rápido', 'devagar', 'ligeiro',
-            'lento', 'fácil', 'difícil', 'leve', 'pesado', 'forte', 'fraco', 'duro', 'mole', 'seco',
-            'molhado', 'quente', 'frio', 'novo', 'velho', 'jovem', 'antigo', 'moderno', 'bonito',
-            'feio', 'bom', 'mau', 'feliz', 'triste', 'alegre', 'contente', 'descontente', 'satisfeito',
-            'insatisfeito', 'cheio', 'vazio', 'rico', 'pobre', 'caro', 'barato', 'caro', 'barato',
-            'claro', 'escuro', 'limpo', 'sujo', 'cheio', 'vazio', 'pesado', 'leve', 'forte', 'fraco',
-            'rápido', 'lento', 'fácil', 'difícil', 'simples', 'complexo', 'direito', 'esquerdo',
-            'superior', 'inferior', 'central', 'lateral', 'frontal', 'traseiro', 'interno', 'externo',
-            'público', 'privado', 'nacional', 'internacional', 'local', 'global', 'urbano', 'rural',
-            'natural', 'artificial', 'real', 'virtual', 'positivo', 'negativo', 'ativo', 'passivo',
-            'principal', 'secundário', 'terciário', 'primário', 'final', 'inicial', 'básico', 'avançado',
-            'geral', 'específico', 'comum', 'raro', 'normal', 'anormal', 'usual', 'inusual', 'frequente',
-            'infrequente', 'constante', 'variável', 'fixo', 'móvel', 'estável', 'instável', 'seguro',
-            'perigoso', 'útil', 'inútil', 'necessário', 'desnecessário', 'importante', 'irrelevante',
-            'urgente', 'tranquilo', 'calmo', 'agitado', 'barulhento', 'silencioso', 'suave', 'áspero',
-            'liso', 'rugoso', 'macio', 'duro', 'flexível', 'rígido', 'elástico', 'plástico', 'metálico',
-            'madeira', 'vidro', 'plástico', 'tecido', 'papel', 'pedra', 'concreto', 'argila', 'cerâmica',
-            'porcelana', 'borracha', 'couro', 'espuma', 'algodão', 'seda', 'linho', 'lã', 'náilon',
-            'poliéster', 'acrílico', 'vinil', 'pvc', 'ferro', 'aço', 'cobre', 'bronze', 'latão',
-            'ouro', 'prata', 'platina', 'paládio', 'níquel', 'zinco', 'chumbo', 'estanho', 'alumínio',
-            'titânio', 'tungstênio', 'mercúrio', 'magnésio', 'cálcio', 'potássio', 'sódio', 'lítio',
-            'berílio', 'boro', 'carbono', 'nitrogênio', 'oxigênio', 'flúor', 'neônio', 'hidrogênio',
-            'hélio', 'argônio', 'criptônio', 'xenônio', 'radônio', 'urânio', 'plutônio', 'tório',
-            'rádio', 'polônio', 'actínio', 'protactínio', 'tório', 'urânio', 'neptúnio', 'plutônio',
-            'amerício', 'cúrio', 'berquélio', 'califórnio', 'einstênio', 'férmio', 'mendelévio',
-            'nobélio', 'laurêncio', 'rutherfórdio', 'dúbnio', 'seabórgio', 'bóhrio', 'hássio',
-            'meitnério', 'darmstádio', 'roentgênio', 'copernício', 'nihônio', 'fleróvio', 'moscóvio',
-            'livermório', 'tenesso', 'oganessônio'
+            'o', 'a', 'os', 'as', 'um', 'uma', 'uns', 'umas', 
+            'de', 'do', 'da', 'dos', 'das', 'em', 'no', 'na', 
+            'nos', 'nas', 'por', 'para', 'com', 'como', 'que', 
+            'e', 'ou', 'se', 'mas', 'porque', 'pois', 'quando', 
+            'onde', 'como', 'qual', 'quais', 'quem', 'não', 'sim'
         }
 
         # Tokeniza o texto em palavras
@@ -492,10 +448,10 @@ Recursos:
 - Extração de textos de diversas traduções
 - Interface moderna e intuitiva
 - Formatação automática dos textos
+- Análise de palavras-chave (excluindo conectivos)
 - Tratamento robusto de erros
 - Opções de salvamento e cópia
 - Atalhos de teclado
-- Análise de palavras-chave
 
 Desenvolvido com Python, Tkinter e BeautifulSoup.
 
