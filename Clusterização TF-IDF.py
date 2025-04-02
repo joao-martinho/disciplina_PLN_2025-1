@@ -49,6 +49,7 @@ class BibleScraperApp:
         self.style.configure('Success.TLabel', foreground=self.success_color)
         self.style.configure('Error.TLabel', foreground=self.error_color)
         self.style.configure('TEntry', padding=5, font=('Segoe UI', 10))
+        self.style.configure('green.Horizontal.TProgressbar', background=self.success_color)
 
         # Configurar fundo da janela principal
         self.root.configure(bg=self.secondary_color)
@@ -128,7 +129,8 @@ class BibleScraperApp:
             fg=self.text_color,
             insertbackground=self.text_color,
             selectbackground=self.primary_color,
-            selectforeground='white'
+            selectforeground='white',
+            state='disabled'  # Campo somente leitura
         )
         self.result_text.pack(fill='both', expand=True)
 
@@ -153,7 +155,8 @@ class BibleScraperApp:
             fg=self.text_color,
             insertbackground=self.text_color,
             selectbackground=self.primary_color,
-            selectforeground='white'
+            selectforeground='white',
+            state='disabled'  # Campo somente leitura
         )
         self.keywords_text.pack(fill='both', expand=True)
 
@@ -173,7 +176,8 @@ class BibleScraperApp:
             fg=self.text_color,
             insertbackground=self.text_color,
             selectbackground=self.primary_color,
-            selectforeground='white'
+            selectforeground='white',
+            state='disabled'  # Campo somente leitura
         )
         self.cluster_text.pack(fill='both', expand=True)
 
@@ -207,12 +211,13 @@ class BibleScraperApp:
         )
         self.clear_button.pack(side='left')
 
-        # Barra de progresso
+        # Barra de progresso verde
         self.progress = ttk.Progressbar(
             self.footer_frame,
             orient='horizontal',
             mode='determinate',
-            length=200
+            length=200,
+            style='green.Horizontal.TProgressbar'
         )
         self.progress.pack(side='right')
 
@@ -295,6 +300,11 @@ class BibleScraperApp:
             if not text_content:
                 raise ValueError("Não foi possível identificar o texto bíblico na página.")
 
+            # Habilita edição temporária para inserir conteúdo
+            self.result_text.config(state='normal')
+            self.keywords_text.config(state='normal')
+            self.cluster_text.config(state='normal')
+            
             self.result_text.delete(1.0, tk.END)
             self.keywords_text.delete(1.0, tk.END)
             self.cluster_text.delete(1.0, tk.END)
@@ -329,7 +339,12 @@ class BibleScraperApp:
                 clusters = self.cluster_verses(verses_text)
                 self.show_clusters(clusters, text_content)
             else:
-                self.cluster_text.insert(tk.END, "Não há versículos suficientes para análise de tópicos.")
+                self.cluster_text.insert(tk.END, "Não há versículos suficientes para análise de tópicos (mínimo 4 versículos).")
+
+            # Desabilita edição novamente
+            self.result_text.config(state='disabled')
+            self.keywords_text.config(state='disabled')
+            self.cluster_text.config(state='disabled')
 
             self.update_status(f"Texto extraído e analisado com sucesso de {parsed_url.netloc}!", self.success_color)
             self.progress['value'] = 100
@@ -415,22 +430,50 @@ class BibleScraperApp:
 
     def cluster_verses(self, verses_text):
         """Agrupa versículos por similaridade usando TF-IDF e K-means"""
-        # Cria vetores TF-IDF
-        vectorizer = TfidfVectorizer(max_features=1000, stop_words='english')
-        X = vectorizer.fit_transform(verses_text)
-        
-        # Determina o número ótimo de clusters (entre 2 e 5)
-        n_clusters = min(5, max(2, len(verses_text)//3))
-        
-        # Aplica K-means
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-        kmeans.fit(X)
-        
-        # Retorna os clusters
-        return kmeans.labels_
+        try:
+            # Filtra versículos vazios ou muito curtos
+            filtered_verses = [v for v in verses_text if len(v.split()) > 3]
+            
+            if len(filtered_verses) < 2:
+                return None
+                
+            # Cria vetores TF-IDF com stopwords em português
+            vectorizer = TfidfVectorizer(
+                max_features=500,
+                stop_words='portuguese',  # Usar stopwords em português
+                min_df=2,  # Ignora termos que aparecem em apenas 1 documento
+                max_df=0.8  # Ignora termos que aparecem em mais de 80% dos documentos
+            )
+            
+            X = vectorizer.fit_transform(filtered_verses)
+            
+            # Determina o número ótimo de clusters (entre 2 e min(5, n_versos/2))
+            n_clusters = min(5, max(2, len(filtered_verses)//2))
+            
+            # Aplica K-means com mais iterações e inicialização melhor
+            kmeans = KMeans(
+                n_clusters=n_clusters,
+                random_state=42,
+                init='k-means++',
+                n_init=10,
+                max_iter=300
+            )
+            
+            return kmeans.fit_predict(X)
+            
+        except Exception as e:
+            print(f"Erro na clusterização: {str(e)}")
+            return None
 
     def show_clusters(self, clusters, verses_data):
         """Mostra os clusters na interface"""
+        if clusters is None or len(clusters) == 0:
+            self.cluster_text.insert(tk.END, "Não foi possível realizar a análise de tópicos.\n")
+            self.cluster_text.insert(tk.END, "Motivos possíveis:\n")
+            self.cluster_text.insert(tk.END, "- Texto muito curto ou poucos versículos\n")
+            self.cluster_text.insert(tk.END, "- Versículos muito similares entre si\n")
+            return
+            
         unique_clusters = set(clusters)
         
         self.cluster_text.insert(tk.END, "Agrupamento de versículos por tópicos:\n\n", 'header')
@@ -449,12 +492,16 @@ class BibleScraperApp:
             self.cluster_text.insert(tk.END, f"Total de versículos neste tópico: {len(cluster_verses)}\n")
 
     def save_to_file(self):
-        content = self.result_text.get(1.0, tk.END)
-        if not content.strip():
-            self.show_error("Nenhum conteúdo para salvar.")
-            return
-
         try:
+            # Habilita temporariamente para pegar o conteúdo
+            self.result_text.config(state='normal')
+            content = self.result_text.get(1.0, tk.END)
+            self.result_text.config(state='disabled')
+            
+            if not content.strip():
+                self.show_error("Nenhum conteúdo para salvar.")
+                return
+
             # Cria diretório de saída se não existir
             os.makedirs('output', exist_ok=True)
 
@@ -485,21 +532,36 @@ class BibleScraperApp:
             self.show_error(f"Erro ao salvar arquivo: {str(e)}")
 
     def copy_to_clipboard(self):
-        content = self.result_text.get(1.0, tk.END)
-        if not content.strip():
-            self.show_error("Nenhum conteúdo para copiar.")
-            return
-
         try:
+            # Habilita temporariamente para pegar o conteúdo
+            self.result_text.config(state='normal')
+            content = self.result_text.get(1.0, tk.END)
+            self.result_text.config(state='disabled')
+            
+            if not content.strip():
+                self.show_error("Nenhum conteúdo para copiar.")
+                return
+
             pyperclip.copy(content)
             self.update_status("Texto copiado para a área de transferência!", self.success_color)
         except Exception as e:
             self.show_error(f"Erro ao copiar para área de transferência: {str(e)}")
 
     def clear_results(self):
+        # Habilita edição temporariamente para limpar
+        self.result_text.config(state='normal')
+        self.keywords_text.config(state='normal')
+        self.cluster_text.config(state='normal')
+        
         self.result_text.delete(1.0, tk.END)
         self.keywords_text.delete(1.0, tk.END)
         self.cluster_text.delete(1.0, tk.END)
+        
+        # Desabilita edição novamente
+        self.result_text.config(state='disabled')
+        self.keywords_text.config(state='disabled')
+        self.cluster_text.config(state='disabled')
+        
         self.update_status("Pronto para começar.", "black")
         self.save_button.config(state='disabled')
         self.copy_button.config(state='disabled')
