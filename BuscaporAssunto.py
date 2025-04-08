@@ -302,19 +302,43 @@ class BibleScraperApp:
 
         try:
             self.update_status(f"Buscando versículos sobre '{subject}' no livro {book_code}...", "black")
+            self.progress['value'] = 10
+            self.root.update()
+
+            # Primeiro descobrimos quantos capítulos tem o livro
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+
+            # Tenta acessar o primeiro capítulo para ver quantos existem
+            test_url = f"https://www.bibliaonline.com.br/nvi/{book_code}/1"
+            response = requests.get(test_url, headers=headers, timeout=10)
+            response.raise_for_status()
+
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            # Procura o seletor de capítulos - isso pode variar conforme o site
+            chapter_selector = soup.find('select', {'id': 'select-chapter'})
+            if chapter_selector:
+                max_chapters = len(chapter_selector.find_all('option'))
+            else:
+                # Se não encontrar o seletor, usa um valor padrão grande
+                max_chapters = 150  # Valor alto para cobrir qualquer livro
+
+            self.update_status(f"Livro {book_code.upper()} tem {max_chapters} capítulos. Buscando...", "black")
             self.progress['value'] = 20
             self.root.update()
 
             verse_groups = []
-            max_chapters = 5  # Número de capítulos a verificar
 
             for chapter in range(1, max_chapters + 1):
+                self.update_status(f"Buscando no capítulo {chapter}/{max_chapters}...", "black")
+                self.progress['value'] = 20 + (70 * chapter // max_chapters)
+                self.root.update()
+
                 url = f"https://www.bibliaonline.com.br/nvi/{book_code}/{chapter}"
 
                 try:
-                    headers = {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                    }
                     response = requests.get(url, headers=headers, timeout=10)
                     response.raise_for_status()
 
@@ -346,10 +370,11 @@ class BibleScraperApp:
                             'verses': current_group.copy()
                         })
 
-                except requests.exceptions.RequestException:
-                    continue  # Pula para o próximo capítulo se houver erro
+                except requests.exceptions.RequestException as e:
+                    # Se der erro, assume que não há mais capítulos
+                    break
 
-            self.progress['value'] = 80
+            self.progress['value'] = 90
             self.root.update()
 
             # Mostra os resultados
@@ -523,47 +548,68 @@ class BibleScraperApp:
             self.root.after(2000, lambda: self.progress.config(value=0))
 
     def extract_bible_text(self, soup):
-        """Extrai o texto bíblico considerando todos os números como versículos"""
-        # Primeiro obtemos todo o texto da página
-        full_text = soup.get_text('\n', strip=True)
+        """Extrai o texto bíblico tratando cada número como início de versículo"""
+        # Primeiro obtemos todo o texto da div principal
+        content_div = soup.find('div', class_='FragmentView_root__F0EBf')
+
+        if not content_div:
+            return [{
+                'number': '1',
+                'text': "Não foi possível encontrar o conteúdo bíblico na página."
+            }]
+
+        # Obtemos todo o texto da div como uma string
+        full_text = content_div.get_text()
 
         verses = []
-        current_verse = {'number': '1', 'text': ''}
+        current_verse = {'number': None, 'text': ''}
 
-        # Divide o texto em linhas e processa cada uma
-        for line in full_text.split('\n'):
-            line = line.strip()
-            if not line:
-                continue
+        # Usamos um iterador para percorrer o texto caractere por caractere
+        i = 0
+        n = len(full_text)
 
-            # Procura por números no início da linha
-            verse_match = re.match(r'^(\d+)\s*(.*)$', line)
-            if verse_match:
-                # Se encontrou um novo versículo, salva o anterior
-                if current_verse['text']:
+        while i < n:
+            char = full_text[i]
+
+            # Se encontramos um dígito
+            if char.isdigit():
+                # Se já estávamos coletando um versículo, salvamos primeiro
+                if current_verse['number'] is not None and current_verse['text']:
                     verses.append(current_verse)
 
-                # Começa um novo versículo
+                # Começamos a coletar o número do versículo
+                verse_number = char
+                i += 1
+
+                # Pegamos todos os dígitos consecutivos (para versículos como "10", "23", etc)
+                while i < n and full_text[i].isdigit():
+                    verse_number += full_text[i]
+                    i += 1
+
+                # Ignoramos espaços e pontuação após o número
+                while i < n and (full_text[i].isspace() or full_text[i] in ['.', ',', ':', ';']):
+                    i += 1
+
+                # Começamos um novo versículo
                 current_verse = {
-                    'number': verse_match.group(1),
-                    'text': verse_match.group(2)
+                    'number': verse_number,
+                    'text': ''
                 }
             else:
-                # Se não encontrou número, adiciona ao versículo atual
-                if current_verse['text']:
-                    current_verse['text'] += ' ' + line
-                else:
-                    current_verse['text'] = line
+                # Se não é um dígito, adicionamos ao texto do versículo atual
+                if current_verse['number'] is not None:
+                    current_verse['text'] += char
+                i += 1
 
-        # Adiciona o último versículo
-        if current_verse['text']:
+        # Adicionamos o último versículo se houver texto
+        if current_verse['number'] is not None and current_verse['text'].strip():
             verses.append(current_verse)
 
-        # Se não encontrou nenhum versículo, trata todo o texto como um único versículo
+        # Se não encontramos nenhum versículo, trata todo o texto como um único versículo
         if not verses:
             verses.append({
                 'number': '1',
-                'text': full_text
+                'text': full_text.strip()
             })
 
         return verses
