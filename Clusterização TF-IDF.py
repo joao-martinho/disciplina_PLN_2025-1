@@ -19,9 +19,9 @@ class BibleScraperApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Extração de Textos Bíblicos")
-        self.root.geometry("1200x900")
+        self.root.geometry("900x700")
         self.root.resizable(True, True)
-        self.root.minsize(1000, 800)
+        self.root.minsize(800, 600)
 
         # Configuração de estilo
         self.style = ttk.Style()
@@ -37,26 +37,32 @@ class BibleScraperApp:
         # Configurar estilos
         self.style.configure('TFrame', background=self.secondary_color)
         self.style.configure('TLabel', background=self.secondary_color,
-                             font=('Segoe UI', 10), foreground=self.text_color)
-        self.style.configure('TButton', font=('Segoe UI', 10), padding=8,
+                             font=('Segoe UI', 9), foreground=self.text_color)
+        self.style.configure('TButton', font=('Segoe UI', 9), padding=6,
                              background=self.primary_color, foreground='white')
         self.style.map('TButton',
                        background=[('active', '#0288D1'), ('pressed', '#005B7F')])
-        self.style.configure('Header.TLabel', font=('Segoe UI', 18, 'bold'),
+        self.style.configure('Header.TLabel', font=('Segoe UI', 14, 'bold'),
                              foreground=self.primary_color)
-        self.style.configure('Subtitle.TLabel', font=('Segoe UI', 10, 'italic'),
+        self.style.configure('Subtitle.TLabel', font=('Segoe UI', 9, 'italic'),
                              foreground="#666666")
         self.style.configure('Success.TLabel', foreground=self.success_color)
         self.style.configure('Error.TLabel', foreground=self.error_color)
-        self.style.configure('TEntry', padding=5, font=('Segoe UI', 10))
-        self.style.configure('green.Horizontal.TProgressbar', background=self.success_color)
+        self.style.configure('TEntry', padding=4, font=('Segoe UI', 9))
+
+        # Configurar estilo da barra de progresso
+        self.style.configure("green.Horizontal.TProgressbar",
+                             troughcolor=self.secondary_color,
+                             background=self.success_color,
+                             lightcolor=self.success_color,
+                             darkcolor=self.success_color)
 
         # Configurar fundo da janela principal
         self.root.configure(bg=self.secondary_color)
 
         # Cabeçalho
         self.header_frame = ttk.Frame(self.root)
-        self.header_frame.pack(pady=(10, 5), padx=10, fill='x')
+        self.header_frame.pack(pady=(5, 3), padx=5, fill='x')
 
         self.title_label = ttk.Label(
             self.header_frame,
@@ -67,38 +73,42 @@ class BibleScraperApp:
 
         self.subtitle_label = ttk.Label(
             self.header_frame,
-            text="Ferramenta profissional para extração e análise de textos bíblicos",
+            text="Ferramenta para extração e análise de textos bíblicos",
             style='Subtitle.TLabel'
         )
         self.subtitle_label.pack()
 
         # Frame principal
         self.main_frame = ttk.Frame(self.root)
-        self.main_frame.pack(pady=5, padx=10, fill='both', expand=True)
+        self.main_frame.pack(pady=3, padx=5, fill='both', expand=True)
 
         # Frame de entrada
         self.input_frame = ttk.Frame(self.main_frame)
-        self.input_frame.pack(fill='x', pady=(5, 10))
+        self.input_frame.pack(fill='x', pady=(3, 5))
 
         ttk.Label(
             self.input_frame,
             text="URL do texto bíblico (ex: https://www.bibliaonline.com.br/nvi/gn/1):"
         ).pack(anchor='w')
 
-        self.url_entry = ttk.Entry(self.input_frame, width=80)
-        self.url_entry.pack(side='left', fill='x', expand=True, padx=(0, 10))
+        self.url_frame = ttk.Frame(self.input_frame)
+        self.url_frame.pack(fill='x', expand=True)
+
+        self.url_entry = ttk.Entry(self.url_frame)
+        self.url_entry.pack(side='left', fill='x', expand=True, padx=(0, 5))
 
         self.fetch_button = ttk.Button(
-            self.input_frame,
-            text="Extrair Texto",
+            self.url_frame,
+            text="Extrair",
             command=self.fetch_bible_text,
-            style='TButton'
+            style='TButton',
+            width=10
         )
         self.fetch_button.pack(side='left')
 
         # Frame de status
         self.status_frame = ttk.Frame(self.main_frame)
-        self.status_frame.pack(fill='x', pady=(0, 10))
+        self.status_frame.pack(fill='x', pady=(0, 5))
 
         self.status_label = ttk.Label(self.status_frame, text="Pronto para começar.")
         self.status_label.pack(anchor='w')
@@ -117,27 +127,27 @@ class BibleScraperApp:
 
         ttk.Label(self.text_tab, text="Texto Extraído:").pack(anchor='w')
 
-        text_font = font.Font(family='Segoe UI', size=11)
+        text_font = font.Font(family='Segoe UI', size=10)
 
         self.result_text = scrolledtext.ScrolledText(
             self.text_tab,
             wrap=tk.WORD,
             font=text_font,
-            padx=10,
-            pady=10,
+            padx=8,
+            pady=8,
             bg='white',
             fg=self.text_color,
             insertbackground=self.text_color,
             selectbackground=self.primary_color,
             selectforeground='white',
-            state='disabled'  # Campo somente leitura
+            state='disabled'
         )
         self.result_text.pack(fill='both', expand=True)
 
         # Adicionar tags para formatação
-        self.result_text.tag_configure('header', font=('Segoe UI', 12, 'bold'))
-        self.result_text.tag_configure('verse', font=('Segoe UI', 11))
-        self.result_text.tag_configure('verse_number', font=('Segoe UI', 11, 'bold'), foreground=self.primary_color)
+        self.result_text.tag_configure('header', font=('Segoe UI', 11, 'bold'))
+        self.result_text.tag_configure('verse', font=('Segoe UI', 10))
+        self.result_text.tag_configure('verse_number', font=('Segoe UI', 10, 'bold'), foreground=self.primary_color)
 
         # Aba de palavras-chave
         self.keywords_tab = ttk.Frame(self.result_notebook)
@@ -149,14 +159,14 @@ class BibleScraperApp:
             self.keywords_tab,
             wrap=tk.WORD,
             font=text_font,
-            padx=10,
-            pady=10,
+            padx=8,
+            pady=8,
             bg='white',
             fg=self.text_color,
             insertbackground=self.text_color,
             selectbackground=self.primary_color,
             selectforeground='white',
-            state='disabled'  # Campo somente leitura
+            state='disabled'
         )
         self.keywords_text.pack(fill='both', expand=True)
 
@@ -170,44 +180,47 @@ class BibleScraperApp:
             self.cluster_tab,
             wrap=tk.WORD,
             font=text_font,
-            padx=10,
-            pady=10,
+            padx=8,
+            pady=8,
             bg='white',
             fg=self.text_color,
             insertbackground=self.text_color,
             selectbackground=self.primary_color,
             selectforeground='white',
-            state='disabled'  # Campo somente leitura
+            state='disabled'
         )
         self.cluster_text.pack(fill='both', expand=True)
 
         # Frame de rodapé
         self.footer_frame = ttk.Frame(self.main_frame)
-        self.footer_frame.pack(fill='x', pady=(10, 0))
+        self.footer_frame.pack(fill='x', pady=(5, 0))
 
         self.save_button = ttk.Button(
             self.footer_frame,
-            text="Salvar em Arquivo",
+            text="Salvar",
             command=self.save_to_file,
             style='TButton',
-            state='disabled'
+            state='disabled',
+            width=10
         )
-        self.save_button.pack(side='left', padx=(0, 10))
+        self.save_button.pack(side='left', padx=(0, 5))
 
         self.copy_button = ttk.Button(
             self.footer_frame,
-            text="Copiar para Área de Transferência",
+            text="Copiar",
             command=self.copy_to_clipboard,
             style='TButton',
-            state='disabled'
+            state='disabled',
+            width=15
         )
-        self.copy_button.pack(side='left', padx=(0, 10))
+        self.copy_button.pack(side='left', padx=(0, 5))
 
         self.clear_button = ttk.Button(
             self.footer_frame,
             text="Limpar",
             command=self.clear_results,
-            style='TButton'
+            style='TButton',
+            width=10
         )
         self.clear_button.pack(side='left')
 
@@ -216,8 +229,8 @@ class BibleScraperApp:
             self.footer_frame,
             orient='horizontal',
             mode='determinate',
-            length=200,
-            style='green.Horizontal.TProgressbar'
+            length=150,
+            style="green.Horizontal.TProgressbar"
         )
         self.progress.pack(side='right')
 
@@ -304,7 +317,7 @@ class BibleScraperApp:
             self.result_text.config(state='normal')
             self.keywords_text.config(state='normal')
             self.cluster_text.config(state='normal')
-            
+
             self.result_text.delete(1.0, tk.END)
             self.keywords_text.delete(1.0, tk.END)
             self.cluster_text.delete(1.0, tk.END)
@@ -323,27 +336,29 @@ class BibleScraperApp:
                 verses_text.append(verse['text'])
                 full_text += f" {verse['text']}"
 
+            # Desabilita edição novamente
+            self.result_text.config(state='disabled')
+
             # Processa as palavras-chave
             keywords = self.extract_keywords(full_text)
             self.keywords_text.insert(tk.END, "Palavras mais frequentes (excluindo conectivos):\n\n", 'header')
-            
+
             for word, count in keywords.most_common(50):
                 self.keywords_text.insert(tk.END, f"{word}: {count}\n")
 
+            self.keywords_text.config(state='disabled')
+
             # Processa a clusterização
-            if len(verses_text) > 3:  # Só faz clusterização se houver versículos suficientes
+            if len(verses_text) >= 2:
                 self.update_status("Realizando análise de tópicos...", "black")
                 self.progress['value'] = 80
                 self.root.update()
-                
+
                 clusters = self.cluster_verses(verses_text)
                 self.show_clusters(clusters, text_content)
             else:
-                self.cluster_text.insert(tk.END, "Não há versículos suficientes para análise de tópicos (mínimo 4 versículos).")
+                self.cluster_text.insert(tk.END, "Pelo menos 2 versículos são necessários para análise de tópicos.")
 
-            # Desabilita edição novamente
-            self.result_text.config(state='disabled')
-            self.keywords_text.config(state='disabled')
             self.cluster_text.config(state='disabled')
 
             self.update_status(f"Texto extraído e analisado com sucesso de {parsed_url.netloc}!", self.success_color)
@@ -364,93 +379,83 @@ class BibleScraperApp:
             self.root.after(2000, lambda: self.progress.config(value=0))
 
     def extract_bible_text(self, soup):
-        """Extrai o texto bíblico da página com formatação melhorada"""
+        """Extrai o texto bíblico considerando todos os números como versículos"""
+        # Primeiro obtemos todo o texto da página
+        full_text = soup.get_text('\n', strip=True)
+
         verses = []
+        current_verse = {'number': '1', 'text': ''}
 
-        # Estratégia 1: Procurar por versículos com números
-        verse_elements = soup.find_all(['p', 'div', 'span'], class_=re.compile(r'verse|versicle|versiculo', re.I))
+        # Divide o texto em linhas e processa cada uma
+        for line in full_text.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
 
-        # Estratégia 2: Procurar por números de versículos (1, 2, 3...)
-        if not verse_elements:
-            verse_elements = soup.find_all(text=re.compile(r'^\d+\s'))
-
-        # Estratégia 3: Procurar em áreas de conteúdo principal
-        if not verse_elements:
-            content = soup.find(['article', 'main', 'div'], class_=re.compile(r'content|text|chapter', re.I))
-            if content:
-                verse_elements = content.find_all(['p', 'div'])
-
-        # Se nenhuma estratégia funcionar, retorna todo o texto da página como um único "versículo"
-        if not verse_elements:
-            full_text = soup.get_text(separator='\n', strip=True)
-            return [{'number': '1', 'text': full_text}]
-
-        # Processa os versículos encontrados
-        for element in verse_elements:
-            verse_text = element.get_text(strip=True)
-
-            # Extrai número do versículo
-            verse_match = re.match(r'^(\d+)\s*(.*)', verse_text)
+            # Procura por números no início da linha
+            verse_match = re.match(r'^(\d+)\s*(.*)$', line)
             if verse_match:
-                verse_number = verse_match.group(1)
-                verse_content = verse_match.group(2)
+                # Se encontrou um novo versículo, salva o anterior
+                if current_verse['text']:
+                    verses.append(current_verse)
+
+                # Começa um novo versículo
+                current_verse = {
+                    'number': verse_match.group(1),
+                    'text': verse_match.group(2)
+                }
             else:
-                verse_number = "?"
-                verse_content = verse_text
+                # Se não encontrou número, adiciona ao versículo atual
+                if current_verse['text']:
+                    current_verse['text'] += ' ' + line
+                else:
+                    current_verse['text'] = line
 
-            # Limpa espaços extras e quebras de linha
-            verse_content = ' '.join(verse_content.split())
+        # Adiciona o último versículo
+        if current_verse['text']:
+            verses.append(current_verse)
 
+        # Se não encontrou nenhum versículo, trata todo o texto como um único versículo
+        if not verses:
             verses.append({
-                'number': verse_number,
-                'text': verse_content
+                'number': '1',
+                'text': full_text
             })
 
         return verses
 
     def extract_keywords(self, text):
         """Extrai palavras-chave importantes, excluindo conectivos comuns"""
-        # Lista reduzida de palavras para excluir (conectivos mais comuns)
         stopwords = {
-            'o', 'a', 'os', 'as', 'um', 'uma', 'uns', 'umas', 
-            'de', 'do', 'da', 'dos', 'das', 'em', 'no', 'na', 
-            'nos', 'nas', 'por', 'para', 'com', 'como', 'que', 
-            'e', 'ou', 'se', 'mas', 'porque', 'pois', 'quando', 
+            'o', 'a', 'os', 'as', 'um', 'uma', 'uns', 'umas',
+            'de', 'do', 'da', 'dos', 'das', 'em', 'no', 'na',
+            'nos', 'nas', 'por', 'para', 'com', 'como', 'que',
+            'e', 'ou', 'se', 'mas', 'porque', 'pois', 'quando',
             'onde', 'como', 'qual', 'quais', 'quem', 'não', 'sim'
         }
 
-        # Tokeniza o texto em palavras
         words = re.findall(r'\b\w+\b', text.lower())
-        
-        # Filtra palavras com mais de 3 caracteres que não estão na lista de stopwords
         keywords = [word for word in words if len(word) > 3 and word not in stopwords]
-        
-        # Conta a frequência de cada palavra
         return Counter(keywords)
 
     def cluster_verses(self, verses_text):
         """Agrupa versículos por similaridade usando TF-IDF e K-means"""
         try:
-            # Filtra versículos vazios ou muito curtos
-            filtered_verses = [v for v in verses_text if len(v.split()) > 3]
-            
-            if len(filtered_verses) < 2:
-                return None
-                
-            # Cria vetores TF-IDF com stopwords em português
             vectorizer = TfidfVectorizer(
                 max_features=500,
-                stop_words='portuguese',  # Usar stopwords em português
-                min_df=2,  # Ignora termos que aparecem em apenas 1 documento
-                max_df=0.8  # Ignora termos que aparecem em mais de 80% dos documentos
+                stop_words='english',
+                min_df=1,
+                max_df=0.9
             )
-            
-            X = vectorizer.fit_transform(filtered_verses)
-            
-            # Determina o número ótimo de clusters (entre 2 e min(5, n_versos/2))
-            n_clusters = min(5, max(2, len(filtered_verses)//2))
-            
-            # Aplica K-means com mais iterações e inicialização melhor
+
+            processed_texts = [re.sub(r'\d+', '', text.lower()) for text in verses_text]
+            processed_texts = [re.sub(r'[^\w\s]', '', text) for text in processed_texts]
+
+            X = vectorizer.fit_transform(processed_texts)
+
+            n_verses = len(verses_text)
+            n_clusters = min(4, max(2, n_verses // 2))
+
             kmeans = KMeans(
                 n_clusters=n_clusters,
                 random_state=42,
@@ -458,61 +463,47 @@ class BibleScraperApp:
                 n_init=10,
                 max_iter=300
             )
-            
-            return kmeans.fit_predict(X)
-            
+
+            kmeans.fit(X)
+
+            return kmeans.labels_
         except Exception as e:
             print(f"Erro na clusterização: {str(e)}")
-            return None
+            return np.zeros(len(verses_text))
 
     def show_clusters(self, clusters, verses_data):
         """Mostra os clusters na interface"""
-        if clusters is None or len(clusters) == 0:
-            self.cluster_text.insert(tk.END, "Não foi possível realizar a análise de tópicos.\n")
-            self.cluster_text.insert(tk.END, "Motivos possíveis:\n")
-            self.cluster_text.insert(tk.END, "- Texto muito curto ou poucos versículos\n")
-            self.cluster_text.insert(tk.END, "- Versículos muito similares entre si\n")
-            return
-            
         unique_clusters = set(clusters)
-        
+
         self.cluster_text.insert(tk.END, "Agrupamento de versículos por tópicos:\n\n", 'header')
-        
+
         for cluster_id in sorted(unique_clusters):
             self.cluster_text.insert(tk.END, f"\n=== Tópico {cluster_id + 1} ===\n", 'header')
-            
-            # Encontra os versículos deste cluster
+
             cluster_verses = [v for v, c in zip(verses_data, clusters) if c == cluster_id]
-            
-            # Mostra os primeiros 5 versículos do cluster (ou menos)
-            for verse in cluster_verses[:5]:
+
+            for verse in cluster_verses:
                 self.cluster_text.insert(tk.END, f"{verse['number']} ", 'verse_number')
                 self.cluster_text.insert(tk.END, f"{verse['text']}\n\n", 'verse')
-            
+
             self.cluster_text.insert(tk.END, f"Total de versículos neste tópico: {len(cluster_verses)}\n")
 
     def save_to_file(self):
+        self.result_text.config(state='normal')
+        content = self.result_text.get(1.0, tk.END)
+        self.result_text.config(state='disabled')
+
+        if not content.strip():
+            self.show_error("Nenhum conteúdo para salvar.")
+            return
+
         try:
-            # Habilita temporariamente para pegar o conteúdo
-            self.result_text.config(state='normal')
-            content = self.result_text.get(1.0, tk.END)
-            self.result_text.config(state='disabled')
-            
-            if not content.strip():
-                self.show_error("Nenhum conteúdo para salvar.")
-                return
-
-            # Cria diretório de saída se não existir
             os.makedirs('output', exist_ok=True)
-
-            # Gera nome de arquivo com base na data, hora e livro/capítulo
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            # Tenta extrair livro e capítulo do texto
             book = "biblia"
             chapter = "texto"
 
-            # Procura por padrões no texto
             book_match = re.search(r'LIVRO:\s*(\w+)', content, re.I)
             chapter_match = re.search(r'CAPÍTULO:\s*(\w+)', content, re.I)
 
@@ -532,36 +523,33 @@ class BibleScraperApp:
             self.show_error(f"Erro ao salvar arquivo: {str(e)}")
 
     def copy_to_clipboard(self):
-        try:
-            # Habilita temporariamente para pegar o conteúdo
-            self.result_text.config(state='normal')
-            content = self.result_text.get(1.0, tk.END)
-            self.result_text.config(state='disabled')
-            
-            if not content.strip():
-                self.show_error("Nenhum conteúdo para copiar.")
-                return
+        self.result_text.config(state='normal')
+        content = self.result_text.get(1.0, tk.END)
+        self.result_text.config(state='disabled')
 
+        if not content.strip():
+            self.show_error("Nenhum conteúdo para copiar.")
+            return
+
+        try:
             pyperclip.copy(content)
             self.update_status("Texto copiado para a área de transferência!", self.success_color)
         except Exception as e:
             self.show_error(f"Erro ao copiar para área de transferência: {str(e)}")
 
     def clear_results(self):
-        # Habilita edição temporariamente para limpar
         self.result_text.config(state='normal')
         self.keywords_text.config(state='normal')
         self.cluster_text.config(state='normal')
-        
+
         self.result_text.delete(1.0, tk.END)
         self.keywords_text.delete(1.0, tk.END)
         self.cluster_text.delete(1.0, tk.END)
-        
-        # Desabilita edição novamente
+
         self.result_text.config(state='disabled')
         self.keywords_text.config(state='disabled')
         self.cluster_text.config(state='disabled')
-        
+
         self.update_status("Pronto para começar.", "black")
         self.save_button.config(state='disabled')
         self.copy_button.config(state='disabled')
@@ -574,23 +562,20 @@ class BibleScraperApp:
         messagebox.showerror("Erro", message)
 
     def show_about(self):
-        about_text = """BibleScraper v3.0
+        about_text = """BibleScraper v3.2
 
-Uma ferramenta profissional para extração e análise de textos bíblicos.
+Uma ferramenta para extração e análise de textos bíblicos.
 
 Recursos:
 - Extração de textos de diversas traduções
-- Interface moderna e intuitiva
-- Formatação automática dos textos
-- Análise de palavras-chave (excluindo conectivos)
-- Clusterização de versículos por similaridade (TF-IDF)
-- Tratamento robusto de erros
+- Identificação automática de versículos
+- Análise de palavras-chave
+- Clusterização de versículos por similaridade
 - Opções de salvamento e cópia
-- Atalhos de teclado
 
-Desenvolvido com Python, Tkinter, BeautifulSoup e scikit-learn.
+Desenvolvido com Python, Tkinter e BeautifulSoup.
 
-© 2025 Extração de Textos Bíblicos - Todos os direitos reservados"""
+© 2025 Extração de Textos Bíblicos"""
         messagebox.showinfo("Sobre", about_text)
 
     def open_docs(self):
@@ -604,9 +589,8 @@ Desenvolvido com Python, Tkinter, BeautifulSoup e scikit-learn.
 if __name__ == "__main__":
     root = tk.Tk()
 
-    # Centralizar a janela
-    window_width = 1200
-    window_height = 900
+    window_width = 900
+    window_height = 700
     screen_width = root.winfo_screenwidth()
     screen_height = root.winfo_screenheight()
     center_x = int(screen_width / 2 - window_width / 2)
