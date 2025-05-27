@@ -9,8 +9,9 @@ import tkinter as tk
 import webbrowser
 from datetime import datetime
 from tkinter import scrolledtext, messagebox, ttk, filedialog
-
 import requests
+from collections import defaultdict
+from string import punctuation
 
 # Configuração de logging
 logging.basicConfig(
@@ -126,11 +127,26 @@ class GPTEcoChatbot:
         ]
 
         self.conversation_history = []
+        self.context = defaultdict(list)  # Armazena contexto por tópicos
         self.bot_name = "GPTEco"
-        self.version = "3.1 Professional"
+        self.version = "3.2 NLP Enhanced"
         self.last_update = "2025-05-27"
         self.knowledge_file = "knowledge_base.json"
         self.load_knowledge_base()
+
+        # Dicionário para análise de sentimento
+        self.sentiment_dict = {
+            'positive': ['ótimo', 'bom', 'excelente', 'feliz', 'maravilhoso', 'gostei', 'adorei'],
+            'negative': ['ruim', 'triste', 'péssimo', 'chato', 'decepcionado', 'horrível'],
+            'neutral': ['ok', 'tá', 'normal', 'bem']
+        }
+
+        # Lista de entidades comuns para NER
+        self.entity_types = {
+            'location': ['brasil', 'frança', 'paris', 'brasília', 'tóquio', 'são paulo', 'rio de janeiro'],
+            'person': ['oscar niemeyer', 'lúcio costa'],
+            'date': [r'\d{1,2}/\d{1,2}/\d{4}', r'\d{1,2} de [a-z]+ de \d{4}']
+        }
 
     def load_knowledge_base(self):
         """Carrega a base de conhecimento de um arquivo JSON, se existir"""
@@ -184,26 +200,130 @@ class GPTEcoChatbot:
             logging.error(f"Erro ao adicionar conhecimento: {str(e)}")
             return False
 
+    def tokenize(self, text):
+        """Tokeniza o texto em palavras, removendo pontuação"""
+        text = text.lower().strip()
+        text = ''.join(char for char in text if char not in punctuation)
+        return text.split()
+
+    def extract_keywords(self, user_input):
+        """Extrai palavras-chave do texto do usuário"""
+        tokens = self.tokenize(user_input)
+        # Remove stop words comuns
+        stop_words = {'é', 'a', 'o', 'em', 'de', 'para', 'com', 'que', 'e', 'um', 'uma'}
+        keywords = [token for token in tokens if token not in stop_words]
+        return keywords
+
+    def analyze_sentiment(self, user_input):
+        """Analisa o sentimento da mensagem do usuário"""
+        tokens = self.tokenize(user_input)
+        score = 0
+        for token in tokens:
+            if token in self.sentiment_dict['positive']:
+                score += 1
+            elif token in self.sentiment_dict['negative']:
+                score -= 1
+            elif token in self.sentiment_dict['neutral']:
+                score += 0.5
+        if score > 0:
+            return 'positive'
+        elif score < 0:
+            return 'negative'
+        return 'neutral'
+
+    def extract_entities(self, user_input):
+        """Extrai entidades nomeadas (locais, pessoas, datas)"""
+        entities = {'location': [], 'person': [], 'date': []}
+        user_input = user_input.lower()
+
+        # Verifica entidades de localização e pessoas
+        for entity_type, entity_list in self.entity_types.items():
+            if entity_type in ['location', 'person']:
+                for entity in entity_list:
+                    if entity in user_input:
+                        entities[entity_type].append(entity)
+            elif entity_type == 'date':
+                for pattern in entity_list:
+                    matches = re.findall(pattern, user_input)
+                    entities['date'].extend(matches)
+
+        return entities
+
+    def update_context(self, user_input, keywords, entities):
+        """Atualiza o contexto da conversa com base em palavras-chave e entidades"""
+        for keyword in keywords:
+            self.context[keyword].append(user_input)
+        for entity_type, entity_list in entities.items():
+            for entity in entity_list:
+                self.context[entity].append(user_input)
+
+    def get_contextual_response(self, user_input, base_response):
+        """Adapta a resposta com base no contexto e sentimento"""
+        sentiment = self.analyze_sentiment(user_input)
+        entities = self.extract_entities(user_input)
+
+        # Ajusta a resposta com base no sentimento
+        if sentiment == 'positive':
+            prefix = random.choice([
+                "Que bom te ver tão animado! ",
+                "Adoro sua energia positiva! ",
+                "Que vibe boa! "
+            ])
+        elif sentiment == 'negative':
+            prefix = random.choice([
+                "Parece que você está meio pra baixo, posso ajudar? ",
+                "Tudo bem? Vamos tentar melhorar seu dia! ",
+                "Sinto que você não está tão animado, quer conversar? "
+            ])
+        else:
+            prefix = ""
+
+        # Inclui entidades na resposta, se aplicável
+        if entities['location'] or entities['person'] or entities['date']:
+            entity_text = []
+            if entities['location']:
+                entity_text.append(f"Você mencionou {', '.join(entities['location'])}")
+            if entities['person']:
+                entity_text.append(f"e falou sobre {', '.join(entities['person'])}")
+            if entities['date']:
+                entity_text.append(f"em relação a {', '.join(entities['date'])}")
+            entity_suffix = f" ({', '.join(entity_text)})."
+        else:
+            entity_suffix = ""
+
+        return f"{prefix}{base_response}{entity_suffix}"
+
     def find_response(self, user_input):
-        """Busca a melhor resposta na base de conhecimento com pontuação"""
+        """Busca a melhor resposta na base de conhecimento com NLP"""
         try:
             user_input = user_input.lower().strip()
             if not user_input:
                 raise ValueError("Entrada vazia não permitida")
 
+            # Extrai palavras-chave e entidades
+            keywords = self.extract_keywords(user_input)
+            entities = self.extract_entities(user_input)
+            self.update_context(user_input, keywords, entities)
+
             best_response = None
             best_score = 0
 
-            # Calcula pontuação para cada padrão
+            # Calcula pontuação com regex e similaridade de palavras-chave
             for pattern, responses in self.knowledge_base.items():
                 matches = len(re.findall(pattern, user_input))
-                if matches > 0:
-                    score = matches * (1 if re.fullmatch(pattern, user_input) else 0.5)
-                    if score > best_score:
-                        best_score = score
-                        best_response = random.choice(responses)
+                pattern_tokens = set(self.tokenize(pattern.replace('|', ' ')))
+                input_tokens = set(keywords)
+                common_tokens = pattern_tokens & input_tokens
+                token_score = len(common_tokens) / max(len(pattern_tokens), 1)
 
-            return best_response
+                score = matches * (1 if re.fullmatch(pattern, user_input) else 0.5) + token_score
+                if score > best_score:
+                    best_score = score
+                    best_response = random.choice(responses)
+
+            if best_response:
+                return self.get_contextual_response(user_input, best_response)
+            return None
 
         except Exception as e:
             logging.error(f"Erro ao processar entrada: {str(e)}")
@@ -222,14 +342,15 @@ class GPTEcoChatbot:
 
             if data.get("AbstractText"):
                 abstract = data["AbstractText"][:300] + ("..." if len(data["AbstractText"]) > 300 else "")
-                return f"🔍 De acordo com minha pesquisa: {abstract}"
+                return self.get_contextual_response(query, f"🔍 De acordo com minha pesquisa: {abstract}")
             elif data.get("RelatedTopics"):
                 for topic in data["RelatedTopics"]:
                     if "Text" in topic:
                         text = topic['Text'][:300] + ("..." if len(topic['Text']) > 300 else "")
-                        return f"🔍 Encontrei esta informação: {text}"
+                        return self.get_contextual_response(query, f"🔍 Encontrei esta informação: {text}")
             elif data.get("AbstractURL"):
-                return f"ℹ️ Não tenho uma resposta direta, mas você pode encontrar mais informações aqui: {data['AbstractURL']}"
+                return self.get_contextual_response(query,
+                                                    f"ℹ️ Não tenho uma resposta direta, mas você pode encontrar mais informações aqui: {data['AbstractURL']}")
 
             return random.choice(self.default_responses)
 
@@ -295,7 +416,7 @@ class GPTEcoChatbot:
 class GPTEcoGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title(f"GPTEco Chatbot - Assistente Virtual Inteligente v3.1")
+        self.root.title(f"GPTEco Chatbot - Assistente Virtual Inteligente v3.2")
         self.root.geometry("1200x800")
         self.root.minsize(900, 600)
 
@@ -316,6 +437,7 @@ class GPTEcoGUI:
         self.root.bind("<Control-s>", lambda event: self.save_conversation("json"))
         self.root.bind("<Control-o>", lambda event: self.load_conversation_from_file())
         self.root.bind("<Control-p>", lambda event: self.show_lgpd())
+        self.root.bind("<Control-n>", lambda event: self.show_nlp_info())
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         # Exibir mensagem inicial
@@ -334,23 +456,23 @@ class GPTEcoGUI:
         """Exibe mensagem de boas-vindas"""
         welcome_msg = (
             f"🤖 {self.chatbot.bot_name} (v{self.chatbot.version}): "
-            f"Bem-vindo ao GPTEco, seu assistente virtual inteligente!\n\n"
-            f"Estou aqui para responder suas perguntas, aprender com você e até pesquisar na web.\n"
-            f"Use a barra lateral à esquerda para carregar conversas salvas ou acessar configurações.\n\n"
+            f"Bem-vindo ao GPTEco, seu assistente virtual com Processamento de Linguagem Natural!\n\n"
+            f"Estou equipado com análise de sentimento, extração de palavras-chave, reconhecimento de entidades e contexto de conversa.\n"
+            f"Use a barra lateral para explorar funcionalidades ou pressione Ctrl+N para aprender sobre NLP.\n\n"
             f"🔹 Exemplos de perguntas:\n"
             f"- Qual é a capital do Brasil?\n"
-            f"- O que é Python?\n"
-            f"- Conte uma piada\n"
+            f"- Estou feliz, conte uma piada!\n"
+            f"- O que Oscar Niemeyer fez em Brasília?\n"
             f"- Como aprender programação?\n\n"
             f"📌 Dicas:\n"
             f"- Pressione Ctrl+H para ajuda\n"
-            f"- Use Ctrl+O para carregar uma conversa salva\n"
+            f"- Use Ctrl+N para informações sobre NLP\n"
             f"- Ensine-me algo novo com o botão 'Ensinar'!\n"
         )
         self.display_message(welcome_msg, "bot")
 
     def setup_styles(self):
-        """Configura estilos visuais para o tema claro/escuro"""
+        """ConfigConcurrentModificationExceptionura estilos visuais para o tema claro/escuro"""
         self.style = ttk.Style()
 
         self.colors = {
@@ -504,7 +626,8 @@ class GPTEcoGUI:
             ("❓ Ajuda", self.show_help),
             ("🔒 LGPD", self.show_lgpd),
             ("🌙 Tema", self.toggle_theme),
-            ("🎓 Ensinar", self.open_teach_window)
+            ("🎓 Ensinar", self.open_teach_window),
+            ("🧠 NLP Info", self.show_nlp_info)
         ]
 
         for text, command in sidebar_buttons:
@@ -752,17 +875,18 @@ class GPTEcoGUI:
 
         basic_text.insert(tk.END, "📌 Como Usar o GPTEco Chatbot\n\n", "header")
         basic_text.insert(tk.END,
-                          "O GPTEco é um assistente virtual avançado que responde perguntas, aprende com você e pesquisa na web.\n\n")
+                          "O GPTEco é um assistente virtual avançado com capacidades de Processamento de Linguagem Natural (NLP).\n\n")
 
         basic_text.insert(tk.END, "🔹 Primeiros Passos:\n", "subheader")
         basic_text.insert(tk.END, "• Digite sua pergunta no campo abaixo e pressione Enter ou clique em 'Enviar'.\n")
         basic_text.insert(tk.END, "• Use a barra lateral para carregar conversas salvas ou acessar configurações.\n")
-        basic_text.insert(tk.END, "• Ensine novas respostas com o botão 'Ensinar' na barra lateral.\n\n")
+        basic_text.insert(tk.END, "• Ensine novas respostas com o botão 'Ensinar'.\n")
+        basic_text.insert(tk.END, "• Explore as capacidades de NLP com Ctrl+N.\n\n")
 
         basic_text.insert(tk.END, "🔹 Exemplos de Perguntas:\n", "subheader")
         basic_text.insert(tk.END, "• Qual é a capital da França?\n")
-        basic_text.insert(tk.END, "• O que é Machine Learning?\n")
-        basic_text.insert(tk.END, "• Conte uma piada\n")
+        basic_text.insert(tk.END, "• Estou feliz, conte uma piada!\n")
+        basic_text.insert(tk.END, "• O que Oscar Niemeyer fez em Brasília?\n")
         basic_text.insert(tk.END, "• Como aprender programação?\n\n")
 
         basic_text.insert(tk.END, "🔹 Atalhos do Teclado:\n", "subheader")
@@ -772,6 +896,7 @@ class GPTEcoGUI:
         basic_text.insert(tk.END, "• Ctrl+S: Salvar conversa (JSON)\n")
         basic_text.insert(tk.END, "• Ctrl+O: Carregar conversa\n")
         basic_text.insert(tk.END, "• Ctrl+P: Ver LGPD\n")
+        basic_text.insert(tk.END, "• Ctrl+N: Informações sobre NLP\n")
 
         basic_text.tag_configure("header", font=("Helvetica", 14, "bold"))
         basic_text.tag_configure("subheader", font=("Helvetica", 12, "bold"))
@@ -799,7 +924,7 @@ class GPTEcoGUI:
         advanced_text.insert(tk.END, "• Use '|' para múltiplos padrões (ex.: oi|olá).\n\n")
 
         advanced_text.insert(tk.END, "🔹 Carregar Conversas:\n", "subheader")
-        advanced_text.insert(tk.END, "• Use 'Carregar Conversa' na barra lateral para importar conversas em JSON.\n")
+        advanced_text.insert(tk.END, "• Use 'Carregar Conversa' para importar conversas em JSON.\n")
         advanced_text.insert(tk.END, "• As mensagens serão exibidas no chat.\n\n")
 
         advanced_text.insert(tk.END, "🔹 Salvamento:\n", "subheader")
@@ -808,7 +933,13 @@ class GPTEcoGUI:
 
         advanced_text.insert(tk.END, "🔹 Pesquisa na Web:\n", "subheader")
         advanced_text.insert(tk.END, "• Se eu não souber a resposta, pesquiso na web usando a API do DuckDuckGo.\n")
-        advanced_text.insert(tk.END, "• Exemplo: 'Qual é o clima em São Paulo?'\n")
+        advanced_text.insert(tk.END, "• Exemplo: 'Qual é o clima em São Paulo?'\n\n")
+
+        advanced_text.insert(tk.END, "🔹 Processamento de Linguagem Natural:\n", "subheader")
+        advanced_text.insert(tk.END, "• Análise de sentimento: Detecta emoções nas mensagens.\n")
+        advanced_text.insert(tk.END, "• Extração de palavras-chave: Identifica termos importantes.\n")
+        advanced_text.insert(tk.END, "• Reconhecimento de entidades: Detecta locais, pessoas e datas.\n")
+        advanced_text.insert(tk.END, "• Contexto: Mantém o contexto da conversa para respostas mais naturais.\n")
 
         advanced_text.tag_configure("header", font=("Helvetica", 14, "bold"))
         advanced_text.tag_configure("subheader", font=("Helvetica", 12, "bold"))
@@ -850,24 +981,25 @@ class GPTEcoGUI:
 
         privacy_text.insert(tk.END, "🔹 Coleta de Dados:\n", "subheader")
         privacy_text.insert(tk.END,
-                            "• Coletamos apenas mensagens digitadas e respostas do bot, armazenadas localmente.\n")
+                            "• Coletamos apenas mensagens digitadas, respostas do bot e contexto de conversa, armazenados localmente.\n")
         privacy_text.insert(tk.END, "• A base de conhecimento é atualizada em 'knowledge_base.json'.\n")
         privacy_text.insert(tk.END, "• Não coletamos informações pessoais, como nome ou e-mail.\n\n")
 
         privacy_text.insert(tk.END, "🔹 Uso dos Dados:\n", "subheader")
-        privacy_text.insert(tk.END, "• Os dados são usados exclusivamente para fornecer respostas e melhorar o bot.\n")
+        privacy_text.insert(tk.END,
+                            "• Os dados são usados exclusivamente para fornecer respostas, melhorar o bot e processar linguagem natural.\n")
         privacy_text.insert(tk.END, "• Nenhuma informação é compartilhada com terceiros.\n\n")
 
         privacy_text.insert(tk.END, "🔹 Armazenamento:\n", "subheader")
         privacy_text.insert(tk.END,
-                            "• Todos os dados (conversas e base de conhecimento) são armazenados no seu dispositivo.\n")
+                            "• Todos os dados (conversas, base de conhecimento, contexto) são armazenados no seu dispositivo.\n")
         privacy_text.insert(tk.END,
                             "• Você pode excluir tudo com 'Limpar Chat' ou deletando os arquivos manualmente.\n\n")
 
         privacy_text.insert(tk.END, "🔹 Segurança:\n", "subheader")
         privacy_text.insert(tk.END,
                             "• Processamento local, exceto para buscas na web (que não armazenam dados pessoais).\n")
-        privacy_text.insert(tk.END, "• Logs-locais não incluem informações sensíveis.\n")
+        privacy_text.insert(tk.END, "• Logs locais não incluem informações sensíveis.\n")
 
         privacy_text.tag_configure("header", font=("Helvetica", 14, "bold"))
         privacy_text.tag_configure("subheader", font=("Helvetica", 12, "bold"))
@@ -901,7 +1033,7 @@ class GPTEcoGUI:
 
         rights_text.insert(tk.END, "🔹 Consentimento:\n", "subheader")
         rights_text.insert(tk.END, "• Você controla o salvamento de conversas e a base de conhecimento.\n")
-        rights_text.insert(tk.END, "• Buscas na web não armazenam dados pessoais.\n\n")
+        rights_text.insert(tk.END, "• Buscas na web e processamento NLP não armazenam dados pessoais.\n\n")
 
         rights_text.insert(tk.END, "📧 Contato:\n", "subheader")
         rights_text.insert(tk.END, "Dúvidas? Envie um e-mail para ")
@@ -915,6 +1047,98 @@ class GPTEcoGUI:
         rights_text.config(state=tk.DISABLED)
 
         self.status_message.set("Janela de LGPD aberta")
+        self.root.after(3000, lambda: self.status_message.set("Digite sua mensagem..."))
+
+    def show_nlp_info(self):
+        """Exibe informações sobre as capacidades de NLP"""
+        nlp_window = tk.Toplevel(self.root)
+        nlp_window.title("Processamento de Linguagem Natural - GPTEco")
+        nlp_window.geometry("800x600")
+        nlp_window.resizable(False, False)
+        self.center_child_window(nlp_window)
+
+        notebook = ttk.Notebook(nlp_window)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Aba de visão geral do NLP
+        overview_frame = ttk.Frame(notebook)
+        notebook.add(overview_frame, text="Visão Geral")
+
+        overview_text = tk.Text(
+            overview_frame,
+            wrap=tk.WORD,
+            font=("Helvetica", 11),
+            bg=self.colors[self.theme]["secondary_bg"],
+            fg=self.colors[self.theme]["text"],
+            padx=10,
+            pady=10,
+            bd=0
+        )
+        overview_text.pack(fill=tk.BOTH, expand=True)
+
+        overview_text.insert(tk.END, "🧠 Processamento de Linguagem Natural (NLP)\n\n", "header")
+        overview_text.insert(tk.END,
+                             "O GPTEco utiliza técnicas de NLP para entender e responder de forma mais natural às suas mensagens.\n\n")
+
+        overview_text.insert(tk.END, "🔹 O que é NLP?\n", "subheader")
+        overview_text.insert(tk.END,
+                             "• NLP é o campo da IA que permite às máquinas entender, interpretar e responder em linguagem humana.\n")
+        overview_text.insert(tk.END, "• No GPTEco, usamos NLP para melhorar a interação com o usuário.\n\n")
+
+        overview_text.insert(tk.END, "🔹 Funcionalidades de NLP:\n", "subheader")
+        overview_text.insert(tk.END, "• Análise de Sentimento: Detecta emoções (positivo, neutro, negativo).\n")
+        overview_text.insert(tk.END, "• Extração de Palavras-chave: Identifica termos importantes na mensagem.\n")
+        overview_text.insert(tk.END, "• Reconhecimento de Entidades: Detecta locais, pessoas e datas.\n")
+        overview_text.insert(tk.END, "• Contexto: Mantém o contexto da conversa para respostas mais coerentes.\n\n")
+
+        overview_text.insert(tk.END, "🔹 Exemplo:\n", "subheader")
+        overview_text.insert(tk.END,
+                             "• Pergunta: 'Estou feliz, conte uma piada sobre Brasília!'\n")
+        overview_text.insert(tk.END,
+                             "• Resposta: Detecta sentimento positivo, reconhece 'Brasília' como local e adapta a resposta.\n")
+
+        overview_text.tag_configure("header", font=("Helvetica", 14, "bold"))
+        overview_text.tag_configure("subheader", font=("Helvetica", 12, "bold"))
+        overview_text.config(state=tk.DISABLED)
+
+        # Aba de demonstração de NLP
+        demo_frame = ttk.Frame(notebook)
+        notebook.add(demo_frame, text="Demonstração")
+
+        demo_text = tk.Text(
+            demo_frame,
+            wrap=tk.WORD,
+            font=("Helvetica", 11),
+            bg=self.colors[self.theme]["secondary_bg"],
+            fg=self.colors[self.theme]["text"],
+            padx=10,
+            pady=10,
+            bd=0
+        )
+        demo_text.pack(fill=tk.BOTH, expand=True)
+
+        demo_text.insert(tk.END, "🚀 Demonstração de NLP\n\n", "header")
+        demo_text.insert(tk.END, "🔹 Como Testar:\n", "subheader")
+        demo_text.insert(tk.END, "• Tente mensagens com emoções claras, como 'Estou triste' ou 'Que dia ótimo!'.\n")
+        demo_text.insert(tk.END, "• Inclua locais, pessoas ou datas, como 'O que Oscar Niemeyer fez em 1960?'.\n")
+        demo_text.insert(tk.END, "• Faça perguntas em sequência sobre o mesmo tópico para testar o contexto.\n\n")
+
+        demo_text.insert(tk.END, "🔹 Exemplos Práticos:\n", "subheader")
+        demo_text.insert(tk.END, "• 'Estou feliz, qual é a capital do Brasil?' → Resposta com tom positivo.\n")
+        demo_text.insert(tk.END, "• 'Fale sobre Tóquio' → Reconhece 'Tóquio' como local.\n")
+        demo_text.insert(tk.END, "• 'Conte mais sobre IA' (após perguntar sobre Machine Learning) → Usa contexto.\n\n")
+
+        demo_text.insert(tk.END, "🔹 Dica:\n", "subheader")
+        demo_text.insert(tk.END,
+                         "• O GPTEco combina regex com similaridade de palavras-chave para respostas mais precisas.\n")
+        demo_text.insert(tk.END,
+                         "• Use frases naturais para ver o NLP em ação!\n")
+
+        demo_text.tag_configure("header", font=("Helvetica", 14, "bold"))
+        demo_text.tag_configure("subheader", font=("Helvetica", 12, "bold"))
+        demo_text.config(state=tk.DISABLED)
+
+        self.status_message.set("Janela de informações de NLP aberta")
         self.root.after(3000, lambda: self.status_message.set("Digite sua mensagem..."))
 
     def center_child_window(self, child_window):
@@ -1078,20 +1302,20 @@ class GPTEcoGUI:
 
         self.display_message(f"👤 Você ({timestamp}): {user_message}", "user")
         self.user_input.delete(0, tk.END)
-        self.status_message.set("Processando mensagem...")
+        self.status_message.set("Processando mensagem com NLP...")
         self.animate_typing(timestamp)
 
     def animate_typing(self, timestamp):
         """Simula a animação de 'digitando...' com pontos piscantes"""
-        typing_msg = f"🤖 {self.chatbot.bot_name}: Digitando"
+        typing_msg = f"🤖 {self.chatbot.bot_name}: Processando"
         self.display_message(typing_msg, "bot")
 
         def update_dots(count=0):
             dots = "." * (count % 4)
             self.chat_area.config(state='normal')
-            if "Digitando" in self.chat_area.get("end-3l", "end-1l"):
+            if "Processando" in self.chat_area.get("end-3l", "end-1l"):
                 self.chat_area.delete("end-3l", "end-1l")
-                self.display_message(f"🤖 {self.chatbot.bot_name}: Digitando{dots}", "bot")
+                self.display_message(f"🤖 {self.chatbot.bot_name}: Processando{dots}", "bot")
             self.chat_area.config(state='disabled')
             if count < 4:
                 self.root.after(300, update_dots, count + 1)
@@ -1129,7 +1353,7 @@ class GPTEcoGUI:
     def update_chat_area(self, message, sender):
         """Atualiza a área de chat com uma nova mensagem"""
         self.chat_area.config(state='normal')
-        if "Digitando" in self.chat_area.get("end-3l", "end-1l"):
+        if "Processando" in self.chat_area.get("end-3l", "end-1l"):
             self.chat_area.delete("end-3l", "end-1l")
 
         tag = "user_bubble" if sender == "user" else "bot_bubble"
@@ -1146,19 +1370,20 @@ class GPTEcoGUI:
         self.chat_area.see(tk.END)
 
     def clear_chat(self):
-        """Limpa a área de chat e o histórico"""
+        """Limpa a área de chat, histórico e contexto"""
         if messagebox.askyesno(
                 "Confirmar",
-                "Tem certeza que deseja limpar o chat? Isso apagará o histórico atual.",
+                "Tem certeza que deseja limpar o chat? Isso apagará o histórico e o contexto da conversa.",
                 parent=self.root
         ):
             self.chat_area.config(state='normal')
             self.chat_area.delete(1.0, tk.END)
             self.chat_area.config(state='disabled')
             self.chatbot.conversation_history = []
+            self.chatbot.context.clear()
             self.display_welcome_message()
-            logging.info("Chat limpo pelo usuário")
-            self.status_message.set("Chat limpo")
+            logging.info("Chat e contexto limpos pelo usuário")
+            self.status_message.set("Chat e contexto limpos")
             self.root.after(3000, lambda: self.status_message.set("Digite sua mensagem..."))
 
     def save_conversation(self, format="json", silent=False):
@@ -1212,11 +1437,16 @@ class GPTEcoGUI:
         self.chat_area.delete(1.0, tk.END)
         self.chatbot.conversation_history = conversation
 
+        # Reconstruir contexto a partir da conversa carregada
         for entry in conversation:
-            timestamp = entry.get("time", datetime.now().strftime("%H:%M:%S"))
             if "user" in entry:
+                keywords = self.chatbot.extract_keywords(entry["user"])
+                entities = self.chatbot.extract_entities(entry["user"])
+                self.chatbot.update_context(entry["user"], keywords, entities)
+                timestamp = entry.get("time", datetime.now().strftime("%H:%M:%S"))
                 self.display_message(f"👤 Você ({timestamp}): {entry['user']}", "user")
             elif "bot" in entry:
+                timestamp = entry.get("time", datetime.now().strftime("%H:%M:%S"))
                 self.display_message(f"🤖 {self.chatbot.bot_name} ({timestamp}): {entry['bot']}", "bot")
 
         self.chat_area.config(state='disabled')
