@@ -127,8 +127,8 @@ class GPTEcoChatbot:
 
         self.conversation_history = []
         self.bot_name = "GPTEco"
-        self.version = "3.0 Professional"
-        self.last_update = "2025-05-21"
+        self.version = "3.1 Professional"
+        self.last_update = "2025-05-27"
         self.knowledge_file = "knowledge_base.json"
         self.load_knowledge_base()
 
@@ -144,14 +144,14 @@ class GPTEcoChatbot:
             logging.error(f"Erro ao carregar base de conhecimento: {str(e)}")
 
     def save_knowledge_base(self):
-        """Salva a base de conhecimento em um arquivo JSON"""
+        """Atualiza a base de conhecimento em um único arquivo JSON"""
         try:
             with open(self.knowledge_file, 'w', encoding='utf-8') as f:
                 json.dump(self.knowledge_base, f, ensure_ascii=False, indent=4)
-            logging.info("Base de conhecimento salva em knowledge_base.json")
+            logging.info("Base de conhecimento atualizada em knowledge_base.json")
             return True
         except Exception as e:
-            logging.error(f"Erro ao salvar base de conhecimento: {str(e)}")
+            logging.error(f"Erro ao atualizar base de conhecimento: {str(e)}")
             return False
 
     def add_knowledge(self, pattern, response):
@@ -175,7 +175,7 @@ class GPTEcoChatbot:
             else:
                 self.knowledge_base[pattern] = [response]
 
-            # Salva a base de conhecimento
+            # Atualiza o arquivo JSON
             self.save_knowledge_base()
             logging.info(f"Novo conhecimento adicionado: {pattern} -> {response}")
             return True
@@ -240,7 +240,7 @@ class GPTEcoChatbot:
             logging.error(f"Erro inesperado na pesquisa: {str(e)}")
             return random.choice(self.default_responses)
 
-    def save_conversation(self, format="json"):
+    def save_conversation(self, format="json", silent=False):
         """Salva o histórico da conversa em JSON ou TXT"""
         try:
             if not self.conversation_history:
@@ -295,7 +295,7 @@ class GPTEcoChatbot:
 class GPTEcoGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title(f"GPTEco Chatbot - Assistente Virtual Inteligente v3.0")
+        self.root.title(f"GPTEco Chatbot - Assistente Virtual Inteligente v3.1")
         self.root.geometry("1200x800")
         self.root.minsize(900, 600)
 
@@ -304,6 +304,8 @@ class GPTEcoGUI:
         self.chatbot = GPTEcoChatbot()
         self.theme = "light"
         self.sidebar_visible = True
+        self.status_message = tk.StringVar()
+        self.status_message.set("Bem-vindo ao GPTEco! Digite sua pergunta abaixo.")
         self.setup_styles()
         self.create_widgets()
 
@@ -364,7 +366,9 @@ class GPTEcoGUI:
                 "input_bg": "#ffffff",
                 "highlight": "#90caf9",
                 "sidebar_bg": "#eceff1",
-                "border": "#bdbdbd"
+                "border": "#bdbdbd",
+                "status_bg": "#f5f5f5",
+                "status_fg": "#424242"
             },
             "dark": {
                 "primary_bg": "#212121",
@@ -378,7 +382,9 @@ class GPTEcoGUI:
                 "input_bg": "#424242",
                 "highlight": "#0288d1",
                 "sidebar_bg": "#2d2d2d",
-                "border": "#616161"
+                "border": "#616161",
+                "status_bg": "#37474f",
+                "status_fg": "#b0bec5"
             }
         }
 
@@ -395,7 +401,8 @@ class GPTEcoGUI:
                 "foreground": self.colors["light"]["button_fg"],
                 "font": ("Helvetica", 10, "bold"),
                 "padding": 8,
-                "borderwidth": 0
+                "borderwidth": 0,
+                "relief": "flat"
             }, "map": {
                 "background": [("active", self.colors["light"]["highlight"])]
             }},
@@ -404,12 +411,18 @@ class GPTEcoGUI:
                 "foreground": self.colors["light"]["text"],
                 "font": ("Helvetica", 11),
                 "insertcolor": self.colors["light"]["text"],
-                "borderwidth": 1
+                "borderwidth": 1,
+                "relief": "flat"
             }},
             "Vertical.TScrollbar": {"configure": {
                 "background": self.colors["light"]["button_bg"],
                 "troughcolor": self.colors["light"]["primary_bg"],
                 "arrowcolor": self.colors["light"]["button_fg"]
+            }},
+            "Status.TLabel": {"configure": {
+                "background": self.colors["light"]["status_bg"],
+                "foreground": self.colors["light"]["status_fg"],
+                "font": ("Helvetica", 9)
             }}
         })
 
@@ -426,7 +439,8 @@ class GPTEcoGUI:
                 "foreground": self.colors["dark"]["button_fg"],
                 "font": ("Helvetica", 10, "bold"),
                 "padding": 8,
-                "borderwidth": 0
+                "borderwidth": 0,
+                "relief": "flat"
             }, "map": {
                 "background": [("active", self.colors["dark"]["highlight"])]
             }},
@@ -435,12 +449,18 @@ class GPTEcoGUI:
                 "foreground": self.colors["dark"]["text"],
                 "font": ("Helvetica", 11),
                 "insertcolor": self.colors["dark"]["text"],
-                "borderwidth": 1
+                "borderwidth": 1,
+                "relief": "flat"
             }},
             "Vertical.TScrollbar": {"configure": {
                 "background": self.colors["dark"]["button_bg"],
                 "troughcolor": self.colors["dark"]["primary_bg"],
                 "arrowcolor": self.colors["dark"]["button_fg"]
+            }},
+            "Status.TLabel": {"configure": {
+                "background": self.colors["dark"]["status_bg"],
+                "foreground": self.colors["dark"]["status_fg"],
+                "font": ("Helvetica", 9)
             }}
         })
 
@@ -449,14 +469,16 @@ class GPTEcoGUI:
 
     def create_widgets(self):
         """Cria os elementos da interface gráfica"""
-        # Frame principal com sidebar
+        # Frame principal com layout responsivo
         self.main_frame = ttk.Frame(self.root)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
+        self.main_frame.grid_columnconfigure(1, weight=1)
+        self.main_frame.grid_rowconfigure(0, weight=1)
 
         # Sidebar
         self.sidebar_frame = ttk.Frame(self.main_frame, style="TFrame", width=250)
-        self.sidebar_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 1))
-        self.sidebar_frame.configure(style="TFrame", relief="flat")
+        self.sidebar_frame.grid(row=0, column=0, sticky="ns", padx=(0, 1))
+        self.sidebar_frame.configure(relief="flat")
 
         # Botão de toggle da sidebar
         self.toggle_sidebar_button = ttk.Button(
@@ -496,11 +518,13 @@ class GPTEcoGUI:
 
         # Frame de conteúdo principal
         self.content_frame = ttk.Frame(self.main_frame, style="TFrame")
-        self.content_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10)
+        self.content_frame.grid(row=0, column=1, sticky="nsew", padx=10)
+        self.content_frame.grid_columnconfigure(0, weight=1)
+        self.content_frame.grid_rowconfigure(1, weight=1)
 
         # Cabeçalho
         self.header_frame = ttk.Frame(self.content_frame, style="TFrame")
-        self.header_frame.pack(fill=tk.X, pady=(10, 5))
+        self.header_frame.grid(row=0, column=0, sticky="ew", pady=(10, 5))
 
         self.title_label = ttk.Label(
             self.header_frame,
@@ -520,7 +544,7 @@ class GPTEcoGUI:
 
         # Área de chat
         self.chat_frame = ttk.Frame(self.content_frame, style="TFrame")
-        self.chat_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        self.chat_frame.grid(row=1, column=0, sticky="nsew", pady=5)
 
         self.chat_area = scrolledtext.ScrolledText(
             self.chat_frame,
@@ -560,7 +584,7 @@ class GPTEcoGUI:
 
         # Frame de entrada
         self.input_frame = ttk.Frame(self.content_frame, style="TFrame")
-        self.input_frame.pack(fill=tk.X, pady=(5, 10))
+        self.input_frame.grid(row=2, column=0, sticky="ew", pady=(5, 10))
 
         self.user_input = ttk.Entry(
             self.input_frame,
@@ -583,7 +607,7 @@ class GPTEcoGUI:
 
         # Botões de ação
         self.action_frame = ttk.Frame(self.content_frame, style="TFrame")
-        self.action_frame.pack(fill=tk.X, pady=(0, 10))
+        self.action_frame.grid(row=3, column=0, sticky="ew", pady=(0, 10))
 
         button_config = {"style": "TButton", "width": 15}
 
@@ -611,9 +635,22 @@ class GPTEcoGUI:
         )
         self.save_txt_button.pack(side=tk.LEFT, padx=5)
 
+        # Barra de status
+        self.status_frame = ttk.Frame(self.content_frame, style="TFrame")
+        self.status_frame.grid(row=4, column=0, sticky="ew", pady=(0, 5))
+
+        self.status_label = ttk.Label(
+            self.status_frame,
+            textvariable=self.status_message,
+            style="Status.TLabel",
+            anchor="w",
+            padding=(10, 5)
+        )
+        self.status_label.pack(fill=tk.X)
+
         # Rodapé
         self.footer_frame = ttk.Frame(self.content_frame, style="TFrame")
-        self.footer_frame.pack(fill=tk.X, pady=(0, 10))
+        self.footer_frame.grid(row=5, column=0, sticky="ew", pady=(0, 10))
 
         self.footer_label = ttk.Label(
             self.footer_frame,
@@ -636,12 +673,14 @@ class GPTEcoGUI:
     def toggle_sidebar(self):
         """Alterna a visibilidade da sidebar"""
         if self.sidebar_visible:
-            self.sidebar_frame.pack_forget()
+            self.sidebar_frame.grid_remove()
             self.toggle_sidebar_button.configure(text="☰")
         else:
-            self.sidebar_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 1))
+            self.sidebar_frame.grid(row=0, column=0, sticky="ns", padx=(0, 1))
             self.toggle_sidebar_button.configure(text="✕")
         self.sidebar_visible = not self.sidebar_visible
+        self.status_message.set("Barra lateral " + ("escondida" if not self.sidebar_visible else "exibida"))
+        self.root.after(3000, lambda: self.status_message.set("Digite sua mensagem..."))
 
     def clear_placeholder(self):
         """Remove o texto placeholder do campo de entrada"""
@@ -677,9 +716,12 @@ class GPTEcoGUI:
         self.version_label.configure(foreground=self.colors[self.theme]["text"])
         self.footer_label.configure(foreground=self.colors[self.theme]["text"])
         self.support_link.configure(foreground=self.colors[self.theme]["accent"])
+        self.status_label.configure(style="Status.TLabel")
         self.sidebar_frame.configure(style="TFrame")
 
+        self.status_message.set(f"Tema alterado para {self.theme.title()}")
         logging.info(f"Tema alterado para {self.theme}")
+        self.root.after(3000, lambda: self.status_message.set("Digite sua mensagem..."))
 
     def show_help(self):
         """Exibe a janela de ajuda com informações detalhadas"""
@@ -772,6 +814,9 @@ class GPTEcoGUI:
         advanced_text.tag_configure("subheader", font=("Helvetica", 12, "bold"))
         advanced_text.config(state=tk.DISABLED)
 
+        self.status_message.set("Janela de ajuda aberta")
+        self.root.after(3000, lambda: self.status_message.set("Digite sua mensagem..."))
+
     def show_lgpd(self):
         """Exibe a janela de LGPD com informações detalhadas"""
         lgpd_window = tk.Toplevel(self.root)
@@ -806,7 +851,7 @@ class GPTEcoGUI:
         privacy_text.insert(tk.END, "🔹 Coleta de Dados:\n", "subheader")
         privacy_text.insert(tk.END,
                             "• Coletamos apenas mensagens digitadas e respostas do bot, armazenadas localmente.\n")
-        privacy_text.insert(tk.END, "• A base de conhecimento pode ser salva em 'knowledge_base.json'.\n")
+        privacy_text.insert(tk.END, "• A base de conhecimento é atualizada em 'knowledge_base.json'.\n")
         privacy_text.insert(tk.END, "• Não coletamos informações pessoais, como nome ou e-mail.\n\n")
 
         privacy_text.insert(tk.END, "🔹 Uso dos Dados:\n", "subheader")
@@ -822,7 +867,7 @@ class GPTEcoGUI:
         privacy_text.insert(tk.END, "🔹 Segurança:\n", "subheader")
         privacy_text.insert(tk.END,
                             "• Processamento local, exceto para buscas na web (que não armazenam dados pessoais).\n")
-        privacy_text.insert(tk.END, "• Logs locais não incluem informações sensíveis.\n")
+        privacy_text.insert(tk.END, "• Logs-locais não incluem informações sensíveis.\n")
 
         privacy_text.tag_configure("header", font=("Helvetica", 14, "bold"))
         privacy_text.tag_configure("subheader", font=("Helvetica", 12, "bold"))
@@ -868,6 +913,9 @@ class GPTEcoGUI:
         rights_text.tag_configure("link", foreground=self.colors[self.theme]["accent"], underline=True)
         rights_text.tag_bind("link", "<Button-1>", lambda e: webbrowser.open("mailto:privacy@gpteco.com"))
         rights_text.config(state=tk.DISABLED)
+
+        self.status_message.set("Janela de LGPD aberta")
+        self.root.after(3000, lambda: self.status_message.set("Digite sua mensagem..."))
 
     def center_child_window(self, child_window):
         """Centraliza uma janela filha em relação à janela principal"""
@@ -968,12 +1016,16 @@ class GPTEcoGUI:
                 )
                 teach_window.destroy()
                 self.send_message_test(pattern)
+                self.status_message.set("Novo conhecimento adicionado")
+                self.root.after(3000, lambda: self.status_message.set("Digite sua mensagem..."))
             else:
                 messagebox.showerror(
                     "Erro",
                     "Falha ao adicionar conhecimento. Verifique o padrão regex.",
                     parent=teach_window
                 )
+                self.status_message.set("Erro ao adicionar conhecimento")
+                self.root.after(3000, lambda: self.status_message.set("Digite sua mensagem..."))
 
         button_frame = ttk.Frame(teach_window)
         button_frame.pack(pady=20)
@@ -991,6 +1043,9 @@ class GPTEcoGUI:
             command=teach_window.destroy,
             style="TButton"
         ).pack(side=tk.LEFT, padx=5)
+
+        self.status_message.set("Janela de ensino aberta")
+        self.root.after(3000, lambda: self.status_message.set("Digite sua mensagem..."))
 
     def send_message_test(self, test_message):
         """Envia uma mensagem de teste após ensinar"""
@@ -1011,6 +1066,8 @@ class GPTEcoGUI:
                 "Por favor, digite uma mensagem válida!",
                 parent=self.root
             )
+            self.status_message.set("Mensagem inválida")
+            self.root.after(3000, lambda: self.status_message.set("Digite sua mensagem..."))
             return
 
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -1021,6 +1078,7 @@ class GPTEcoGUI:
 
         self.display_message(f"👤 Você ({timestamp}): {user_message}", "user")
         self.user_input.delete(0, tk.END)
+        self.status_message.set("Processando mensagem...")
         self.animate_typing(timestamp)
 
     def animate_typing(self, timestamp):
@@ -1049,10 +1107,10 @@ class GPTEcoGUI:
     def process_message(self, user_message, timestamp):
         """Processa a mensagem em uma thread separada"""
         time.sleep(0.3)
-
         response = self.chatbot.find_response(user_message)
 
         if not response:
+            self.status_message.set("Pesquisando na web...")
             response = self.chatbot.search_web(user_message)
 
         self.chatbot.conversation_history.append({
@@ -1064,6 +1122,9 @@ class GPTEcoGUI:
 
         if len(self.chatbot.conversation_history) % 5 == 0:
             self.save_conversation("json", silent=True)
+
+        self.status_message.set("Resposta enviada")
+        self.root.after(3000, lambda: self.status_message.set("Digite sua mensagem..."))
 
     def update_chat_area(self, message, sender):
         """Atualiza a área de chat com uma nova mensagem"""
@@ -1097,6 +1158,8 @@ class GPTEcoGUI:
             self.chatbot.conversation_history = []
             self.display_welcome_message()
             logging.info("Chat limpo pelo usuário")
+            self.status_message.set("Chat limpo")
+            self.root.after(3000, lambda: self.status_message.set("Digite sua mensagem..."))
 
     def save_conversation(self, format="json", silent=False):
         """Salva a conversa em JSON ou TXT"""
@@ -1109,6 +1172,7 @@ class GPTEcoGUI:
                     f"Conversa salva em:\n{result}",
                     parent=self.root
                 )
+                self.status_message.set(f"Conversa salva em {result}")
             logging.info(f"Conversa salva em {result}")
         else:
             messagebox.showerror(
@@ -1116,7 +1180,11 @@ class GPTEcoGUI:
                 f"Falha ao salvar a conversa:\n{result}",
                 parent=self.root
             )
+            self.status_message.set("Erro ao salvar conversa")
             logging.error(f"Falha ao salvar conversa: {result}")
+
+        if not silent:
+            self.root.after(3000, lambda: self.status_message.set("Digite sua mensagem..."))
 
     def load_conversation_from_file(self):
         """Abre um seletor de arquivos para carregar uma conversa em JSON"""
@@ -1136,6 +1204,8 @@ class GPTEcoGUI:
                 "Não foi possível carregar a conversa. Verifique o arquivo.",
                 parent=self.root
             )
+            self.status_message.set("Erro ao carregar conversa")
+            self.root.after(3000, lambda: self.status_message.set("Digite sua mensagem..."))
             return
 
         self.chat_area.config(state='normal')
@@ -1155,7 +1225,9 @@ class GPTEcoGUI:
             f"Conversa carregada de:\n{filename}",
             parent=self.root
         )
+        self.status_message.set(f"Conversa carregada de {filename}")
         logging.info(f"Conversa carregada de {filename}")
+        self.root.after(3000, lambda: self.status_message.set("Digite sua mensagem..."))
 
     def on_closing(self):
         """Executa ações antes de fechar o aplicativo"""
@@ -1167,7 +1239,8 @@ class GPTEcoGUI:
             self.save_conversation("json")
         self.chatbot.save_knowledge_base()
         logging.info("Aplicativo encerrado pelo usuário")
-        self.root.destroy()
+        self.status_message.set("Encerrando aplicativo...")
+        self.root.after(1000, self.root.destroy)
 
 
 def main():
